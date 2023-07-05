@@ -63,7 +63,7 @@ impl PlayerScore {
     }
 }
 
-#[derive(Debug)]
+#[derive(Default, Debug)]
 pub struct BJJMatch {
     pub info: MatchInformation,
     pub score: MatchScore,
@@ -158,12 +158,41 @@ pub struct MatchInformation {
     pub fight_number: usize
 }
 
+impl Default for MatchInformation {
+    fn default() -> Self {
+        Self {
+            competitor_one: Competitor {
+                last_name: "One".to_owned(),
+                ..Default::default()
+            },
+            competitor_two: Competitor {
+                last_name: "Two".to_owned(),
+                ..Default::default()
+            },
+            match_time_minutes: 5,
+            mat_number: 1,
+            fight_number: 1
+        }
+    }
+}
+
 #[derive(Debug)]
 pub struct Competitor {
     pub first_name: String,
     pub last_name: String,
     pub team_name: String,
     pub country: Country
+}
+
+impl Default for Competitor {
+    fn default() -> Self {
+        Self {
+            first_name: "Competitor".to_owned(),
+            last_name: "Name".to_owned(),
+            team_name: "BJJ Team".to_owned(),
+            country: Country::Australia
+        }
+    }
 }
 
 impl Competitor {
@@ -176,6 +205,7 @@ impl Competitor {
         }
     }
 }
+
 
 #[derive(Default, Debug)]
 pub struct MatchTime {

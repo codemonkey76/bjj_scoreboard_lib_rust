@@ -1,3 +1,4 @@
+use std::default;
 use std::io::{stdout, Write};
 use std::time::Duration;
 use crossterm::terminal::{Clear, ClearType, disable_raw_mode, enable_raw_mode, EnterAlternateScreen, LeaveAlternateScreen};
@@ -5,13 +6,142 @@ use anyhow::Result;
 use crossterm::{event, ExecutableCommand, QueueableCommand};
 use crossterm::event::{Event, KeyCode};
 use crossterm::style::Print;
-use bjj_scoreboard::{BJJMatch, Competitor, CompetitorNumber, Country, MatchState};
+use bjj_scoreboard::{BJJMatch, Competitor, CompetitorNumber, Country, MatchInformation, MatchState};
+use eframe::egui;
+use crate::AppState::{NewMatchDialog, Normal};
+
+fn main() -> Result<(), eframe::Error> {
+    let options = eframe::NativeOptions {
+        initial_window_size: Some(egui::vec2(640.0, 480.0)),
+        ..Default::default()
+    };
+    eframe::run_native(
+        "BJJ Scoreboard",
+        options,
+        Box::new(|_cc| Box::<BjjScoreboard>::default())
+    )
+}
+
+enum AppState {
+    NewMatchDialog,
+    Normal
+}
+
+struct BjjScoreboard {
+    bjj_match: BJJMatch,
+    app_state: AppState,
+    match_dialog_open: bool
+}
+
+impl Default for BjjScoreboard {
+    fn default() -> Self {
+        Self {
+            bjj_match: Default::default(),
+            app_state: NewMatchDialog,
+            match_dialog_open: true
+        }
+    }
+}
+
+impl eframe::App for BjjScoreboard {
+    fn update(&mut self, ctx: &egui::Context, _frame: &mut eframe::Frame) {
+        match self.app_state {
+            AppState::NewMatchDialog => {
+                self.draw_new_match_modal(ctx)
+            },
+            AppState::Normal => {
+                self.draw_match_screen(ctx);
+            }
+        }
+
+    }
+}
+
+impl BjjScoreboard {
+    fn draw_match_screen(&mut self, ctx: &egui::Context) {
+        egui::CentralPanel::default().show(ctx, |ui| {
+            ui.heading("BJJ Scoreboard");
+            ui.heading(format_millis(self.bjj_match.time.get_remaining_time_milliseconds()))
+            // ui.horizontal(|ui| {
+                // let name_label = ui.label("Competitor 1: ");
+                // ui.text_edit_singleline(&mut self.bjj_match.competitor_one_name).labelled_by(name_label.id);
+            // });
+        });
+    }
+
+    fn draw_competitor_dialog(heading: &str, competitor: &mut Competitor, ui: &mut egui::Ui) {
+        ui.heading(heading);
+        ui.end_row();
+
+        let first = ui.label("First Name");
+        ui.text_edit_singleline(&mut competitor.first_name).labelled_by(first.id);
+        ui.end_row();
+
+        let last = ui.label("Last Name");
+        ui.text_edit_singleline(&mut competitor.last_name).labelled_by(last.id);
+        ui.end_row();
+
+        let team = ui.label("Team");
+        ui.text_edit_singleline(&mut competitor.team_name).labelled_by(team.id);
+        ui.end_row();
+
+        let country = ui.label("Country");
+        egui::ComboBox::from_id_source(country.id)
+            .selected_text(format!("{:?}", competitor.country))
+            .show_ui(ui, |ui| {
+                ui.style_mut().wrap = Some(false);
+                ui.set_min_width(60.0);
+                ui.selectable_value(&mut competitor.country, Country::Australia, "Australia");
+                ui.selectable_value(&mut competitor.country, Country::Brazil, "Brazil");
+            });
+        ui.end_row();
+    }
+
+    fn draw_match_info_dialog(heading: &str, info: &mut MatchInformation, ui: &mut egui::Ui) {
+        ui.heading(heading);
+        ui.end_row();
+
+        let match_time = ui.label("Match Duration (mins)");
+        ui.add(egui::DragValue::new(&mut info.match_time_minutes).speed(0.1).clamp_range(1..=30)).labelled_by(match_time.id);
+        ui.end_row();
+
+        let mat_num = ui.label("Mat Number");
+        ui.add(egui::DragValue::new(&mut info.mat_number).speed(0.1).clamp_range(1..=20)).labelled_by(mat_num.id);
+        ui.end_row();
+
+        let fight_num = ui.label("Fight Number");
+        ui.add(egui::DragValue::new(&mut info.fight_number).speed(0.1).clamp_range(1..=30)).labelled_by(fight_num.id);
+        ui.end_row();
+    }
+
+    fn draw_new_match_modal(&mut self, ctx: &egui::Context) {
+        egui::Window::new("Match Settings")
+            .open(&mut self.match_dialog_open)
+            .show(ctx,|ui| {
+                    egui::Grid::new("my_grid")
+                        .num_columns(2)
+                        .spacing([40.0, 4.0])
+                        .striped(true)
+                        .show(ui, |ui| {
+                            BjjScoreboard::draw_competitor_dialog("Competitor One", &mut self.bjj_match.info.competitor_one, ui);
+                            ui.separator();
+                            ui.end_row();
+                            BjjScoreboard::draw_competitor_dialog("Competitor Two", &mut self.bjj_match.info.competitor_two, ui);
+                            ui.separator();
+                            ui.end_row();
+                            BjjScoreboard::draw_match_info_dialog("Match Information", &mut self.bjj_match.info, ui);
+                            ui.separator();
+                            ui.end_row();
+                            if ui.add(egui::Button::new("Start Match")).clicked() {
+                                self.app_state = AppState::Normal;
+                                self.bjj_match.start();
+                            }
+                        });
+                }
+            );
+    }
 
 
-fn main() -> Result<()> {
-    app()?;
-
-    Ok(())
 }
 
 fn app() -> Result<()> {
