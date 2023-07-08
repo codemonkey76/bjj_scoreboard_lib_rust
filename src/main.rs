@@ -8,7 +8,7 @@ use crossterm::event::{Event, KeyCode};
 use crossterm::style::Print;
 use bjj_scoreboard::{BJJMatch, Competitor, CompetitorNumber, Country, MatchInformation, MatchState};
 use eframe::egui;
-use eframe::egui::{Align2, Color32, FontFamily, Pos2, Rounding};
+use eframe::egui::{Align2, Color32, FontFamily, Key, Pos2, Rounding};
 use eframe::emath::Rect;
 use egui_extras::Size;
 use egui_grid::GridBuilder;
@@ -34,7 +34,100 @@ enum AppState {
 struct BjjScoreboard {
     bjj_match: BJJMatch,
     app_state: AppState,
-    match_dialog_open: bool
+    match_dialog_open: bool,
+    first_run: bool,
+    color_scheme: ColorScheme,
+    font_sizes: FontSizes,
+}
+
+struct FontSizes {
+    competitor_name: f32,
+    competitor_team: f32,
+    competitor_adv_label: f32,
+    competitor_adv: f32,
+    competitor_pen_label: f32,
+    competitor_pen: f32,
+    competitor_points: f32,
+    time: f32,
+    fight_info_heading: f32,
+    fight_info_sub_heading: f32,
+}
+
+impl Default for FontSizes {
+    fn default() -> Self {
+        Self {
+            competitor_name: 32.0,
+            competitor_team: 32.0,
+            competitor_adv_label: 32.0,
+            competitor_adv: 32.0,
+            competitor_pen_label: 32.0,
+            competitor_pen: 32.0,
+            competitor_points: 32.0,
+            time: 32.0,
+            fight_info_heading: 32.0,
+            fight_info_sub_heading: 32.0,
+        }
+    }
+}
+
+struct DrawableComponent {
+    rect: Rect,
+    font_size: f32,
+    text: String,
+}
+
+struct ColorScheme {
+    competitor_one_bg: Color32,
+    competitor_one_name: Color32,
+    competitor_one_team: Color32,
+    competitor_one_adv_bg: Color32,
+    competitor_one_adv: Color32,
+    competitor_one_pen_bg: Color32,
+    competitor_one_pen: Color32,
+    competitor_one_points_bg: Color32,
+    competitor_one_points: Color32,
+    competitor_two_bg: Color32,
+    competitor_two_name: Color32,
+    competitor_two_team: Color32,
+    competitor_two_adv_bg: Color32,
+    competitor_two_adv: Color32,
+    competitor_two_pen_bg: Color32,
+    competitor_two_pen: Color32,
+    competitor_two_points_bg: Color32,
+    competitor_two_points: Color32,
+    bottom_pane_bg: Color32,
+    time: Color32,
+    fight_info_heading: Color32,
+    fight_info_sub_heading: Color32,
+}
+
+impl Default for ColorScheme {
+    fn default() -> Self {
+        Self {
+            competitor_one_bg: Color32::from_rgb(0, 0, 0),
+            competitor_one_name: Color32::from_rgb(255, 255, 255),
+            competitor_one_team: Color32::from_rgb(255, 255, 255),
+            competitor_one_adv_bg: Color32::from_rgb(0, 0, 0),
+            competitor_one_adv: Color32::from_rgb(255, 255, 255),
+            competitor_one_pen_bg: Color32::from_rgb(0, 0, 0),
+            competitor_one_pen: Color32::from_rgb(255, 255, 255),
+            competitor_one_points_bg: Color32::from_rgb(227, 85, 141),
+            competitor_one_points: Color32::from_rgb(255, 255, 255),
+            competitor_two_bg: Color32::from_rgb(49, 42, 109),
+            competitor_two_name: Color32::from_rgb(255, 255, 255),
+            competitor_two_team: Color32::from_rgb(255, 255, 255),
+            competitor_two_adv_bg: Color32::from_rgb(49, 42, 109),
+            competitor_two_adv: Color32::from_rgb(255, 255, 255),
+            competitor_two_pen_bg: Color32::from_rgb(49, 42, 109),
+            competitor_two_pen: Color32::from_rgb(255, 255, 255),
+            competitor_two_points_bg: Color32::from_rgb(46, 100, 209),
+            competitor_two_points: Color32::from_rgb(255, 255, 255),
+            bottom_pane_bg: Color32::from_rgb(0, 160, 0),
+            time: Color32::from_rgb(255, 255, 180),
+            fight_info_heading: Color32::from_rgb(200, 200, 140),
+            fight_info_sub_heading: Color32::from_rgb(255, 255, 255),
+        }
+    }
 }
 
 impl Default for BjjScoreboard {
@@ -42,13 +135,20 @@ impl Default for BjjScoreboard {
         Self {
             bjj_match: Default::default(),
             app_state: NewMatchDialog,
-            match_dialog_open: true
+            match_dialog_open: true,
+            first_run: true,
+            color_scheme: Default::default(),
+            font_sizes: Default::default(),
         }
     }
 }
 
 impl eframe::App for BjjScoreboard {
     fn update(&mut self, ctx: &egui::Context, _frame: &mut eframe::Frame) {
+        if self.first_run {
+            self.setup(ctx);
+            self.first_run = false;
+        }
         match self.app_state {
             AppState::NewMatchDialog => {
                 self.draw_new_match_modal(ctx)
@@ -58,21 +158,34 @@ impl eframe::App for BjjScoreboard {
                 ctx.request_repaint();
             }
         }
-
     }
 }
 
 impl BjjScoreboard {
-    fn draw_match_screen(&mut self, ctx: &egui::Context) {
-        egui::CentralPanel::default().show(ctx, |ui| {
-            ui.heading("BJJ Scoreboard");
-            ui.heading(format_millis(self.bjj_match.time.get_remaining_time_milliseconds()))
-            // ui.horizontal(|ui| {
-                // let name_label = ui.label("Competitor 1: ");
-                // ui.text_edit_singleline(&mut self.bjj_match.competitor_one_name).labelled_by(name_label.id);
-            // });
-        });
+    fn setup(&mut self, ctx: &egui::Context) {
+
+        let mut fonts = egui::FontDefinitions::default();
+
+        fonts.font_data.insert(
+            "main_font".to_owned(),
+            egui::FontData::from_static(include_bytes!("../assets/fonts/BebasNeue-Regular.ttf")),
+        );
+
+        fonts
+            .families
+            .entry(egui::FontFamily::Proportional)
+            .or_default()
+            .insert(0, "main_font".to_owned());
+
+        fonts
+            .families
+            .entry(egui::FontFamily::Monospace)
+            .or_default()
+            .push("main_font".to_owned());
+
+        ctx.set_fonts(fonts);
     }
+
 
     fn draw_competitor_dialog(heading: &str, competitor: &mut Competitor, ui: &mut egui::Ui) {
         ui.heading(heading);
@@ -105,6 +218,63 @@ impl BjjScoreboard {
     fn draw_active_match_screen(&mut self, ctx: &egui::Context) {
         egui::CentralPanel::default().show(ctx, |ui| {
             self.ui(ui);
+
+            if ctx.input(|i| i.key_pressed(Key::Q)) {
+                self.bjj_match.add_points(2, CompetitorNumber::One);
+            }
+            if ctx.input(|i| i.key_pressed(Key::W)) {
+                self.bjj_match.add_points(3, CompetitorNumber::One);
+            }
+            if ctx.input(|i| i.key_pressed(Key::E)) {
+                self.bjj_match.add_points(4, CompetitorNumber::One);
+            }
+            if ctx.input(|i| i.key_pressed(Key::R)) {
+                self.bjj_match.add_advantage( CompetitorNumber::One);
+            }
+            if ctx.input(|i| i.key_pressed(Key::T)) {
+                self.bjj_match.add_penalty( CompetitorNumber::One);
+            }
+            if ctx.input(|i| i.key_pressed(Key::Y)) {
+                self.bjj_match.subtract_point( CompetitorNumber::One);
+            }
+            if ctx.input(|i| i.key_pressed(Key::U)) {
+                self.bjj_match.subtract_advantage( CompetitorNumber::One);
+            }
+            if ctx.input(|i| i.key_pressed(Key::I)) {
+                self.bjj_match.subtract_penalty( CompetitorNumber::One);
+            }
+
+
+            if ctx.input(|i| i.key_pressed(Key::A)) {
+                self.bjj_match.add_points(2, CompetitorNumber::Two);
+            }
+            if ctx.input(|i| i.key_pressed(Key::S)) {
+                self.bjj_match.add_points(3, CompetitorNumber::Two);
+            }
+            if ctx.input(|i| i.key_pressed(Key::D)) {
+                self.bjj_match.add_points(4, CompetitorNumber::Two);
+            }
+            if ctx.input(|i| i.key_pressed(Key::F)) {
+                self.bjj_match.add_advantage( CompetitorNumber::Two);
+            }
+            if ctx.input(|i| i.key_pressed(Key::G)) {
+                self.bjj_match.add_penalty( CompetitorNumber::Two);
+            }
+            if ctx.input(|i| i.key_pressed(Key::H)) {
+                self.bjj_match.subtract_point( CompetitorNumber::Two);
+            }
+            if ctx.input(|i| i.key_pressed(Key::J)) {
+                self.bjj_match.subtract_advantage( CompetitorNumber::Two);
+            }
+            if ctx.input(|i| i.key_pressed(Key::K)) {
+                self.bjj_match.subtract_penalty( CompetitorNumber::Two);
+            }
+
+            if ctx.input(|i| i.key_pressed(Key::Space)) {
+                self.bjj_match.toggle_start_stop();
+            }
+            
+
         });
     }
 
@@ -114,38 +284,120 @@ impl BjjScoreboard {
 
         ui.painter().rect_filled(match_grid.full, Rounding::none(), Color32::BLACK);
 
-        ui.painter().rect_filled(match_grid.competitor_one.flag, Rounding::none(), Color32::LIGHT_GREEN);
-        ui.painter().rect_filled(match_grid.competitor_one.name, Rounding::none(), Color32::DARK_GREEN);
-        ui.painter().rect_filled(match_grid.competitor_one.team, Rounding::none(), Color32::DARK_GRAY);
-        ui.painter().rect_filled(match_grid.competitor_one.points, Rounding::none(), Color32::RED);
-
-
-        ui.painter().rect_filled(match_grid.competitor_two.full, Rounding::none(), Color32::DARK_BLUE);
-
-        ui.painter().rect_filled(match_grid.competitor_two.flag, Rounding::none(), Color32::BROWN);
-        ui.painter().rect_filled(match_grid.competitor_two.name, Rounding::none(), Color32::YELLOW);
-        ui.painter().rect_filled(match_grid.competitor_two.team, Rounding::none(), Color32::DARK_GRAY);
-        ui.painter().rect_filled(match_grid.competitor_two.points, Rounding::none(), Color32::BLUE);
-
-        ui.painter().rect_filled(match_grid.time.time, Rounding::none(), Color32::BLUE);
-        ui.painter().rect_filled(match_grid.time.fight_info_heading, Rounding::none(), Color32::LIGHT_GREEN);
-        ui.painter().rect_filled(match_grid.time.fight_info_sub_heading, Rounding::none(), Color32::GREEN);
-        ui.painter().rect_filled(match_grid.time.logo, Rounding::none(), Color32::BROWN);
-
-
-        // Specify the text color
-        let color = Color32::from_rgb(255, 0, 0);
+        ui.painter().rect_filled(match_grid.competitor_one.left, Rounding::none(), self.color_scheme.competitor_one_bg);
+        ui.painter().rect_filled(match_grid.competitor_one.advantages, Rounding::none(), self.color_scheme.competitor_one_adv_bg);
+        ui.painter().rect_filled(match_grid.competitor_one.penalties, Rounding::none(), self.color_scheme.competitor_one_pen_bg);
+        ui.painter().rect_filled(match_grid.competitor_one.points, Rounding::none(), self.color_scheme.competitor_one_points_bg);
+        ui.painter().rect_filled(match_grid.competitor_two.left, Rounding::none(), self.color_scheme.competitor_two_bg);
+        ui.painter().rect_filled(match_grid.competitor_two.advantages, Rounding::none(), self.color_scheme.competitor_two_adv_bg);
+        ui.painter().rect_filled(match_grid.competitor_two.penalties, Rounding::none(), self.color_scheme.competitor_two_pen_bg);
+        ui.painter().rect_filled(match_grid.competitor_two.points, Rounding::none(), self.color_scheme.competitor_two_points_bg);
 
         let font = egui::FontId {
             size: 32.0,
             ..Default::default()
         };
 
+        ui.painter().text(
+            match_grid.competitor_one.name.left_center(),
+            Align2::LEFT_CENTER,
+            self.bjj_match.info.competitor_one.get_display_name(),
+            egui::FontId { size: self.font_sizes.competitor_name, ..Default::default()},
+            self.color_scheme.competitor_one_name);
 
-        ui.painter().text(match_grid.time.time.center(), Align2::CENTER_CENTER, format_millis(self.bjj_match.time.get_remaining_time_milliseconds()), font, color);
+        ui.painter().text(
+            match_grid.competitor_one.team.left_center(),
+            Align2::LEFT_CENTER,
+            self.bjj_match.info.competitor_one.team_name.as_str(),
+            egui::FontId { size: self.font_sizes.competitor_name, ..Default::default()},
+            self.color_scheme.competitor_one_team);
+
+        ui.painter().text(
+            match_grid.competitor_one.advantages.center(),
+            Align2::CENTER_CENTER,
+            self.bjj_match.score.competitor_one_score.advantages.to_string(),
+            egui::FontId { size: self.font_sizes.competitor_adv, ..Default::default()},
+            self.color_scheme.competitor_one_adv);
+
+        ui.painter().text(
+            match_grid.competitor_one.penalties.center(),
+            Align2::CENTER_CENTER,
+            self.bjj_match.score.competitor_one_score.penalties.to_string(),
+            egui::FontId { size: self.font_sizes.competitor_pen, ..Default::default()},
+            self.color_scheme.competitor_one_pen);
+
+        ui.painter().text(
+            match_grid.competitor_one.points.center(),
+            Align2::CENTER_CENTER,
+            self.bjj_match.score.competitor_one_score.points.to_string(),
+            egui::FontId { size: self.font_sizes.competitor_points, ..Default::default()},
+            self.color_scheme.competitor_one_points);
+
+        ui.painter().text(
+            match_grid.competitor_two.name.left_center(),
+            Align2::LEFT_CENTER,
+            self.bjj_match.info.competitor_two.get_display_name(),
+            egui::FontId { size: self.font_sizes.competitor_name, ..Default::default()},
+            self.color_scheme.competitor_two_name);
+
+        ui.painter().text(
+            match_grid.competitor_two.team.left_center(),
+            Align2::LEFT_CENTER,
+            self.bjj_match.info.competitor_two.team_name.as_str(),
+            egui::FontId { size: self.font_sizes.competitor_name, ..Default::default()},
+            self.color_scheme.competitor_two_team);
+
+        ui.painter().text(
+            match_grid.competitor_two.advantages.center(),
+            Align2::CENTER_CENTER,
+            self.bjj_match.score.competitor_two_score.advantages.to_string(),
+            egui::FontId { size: self.font_sizes.competitor_adv, ..Default::default()},
+            self.color_scheme.competitor_two_adv);
+
+        ui.painter().text(
+            match_grid.competitor_two.penalties.center(),
+            Align2::CENTER_CENTER,
+            self.bjj_match.score.competitor_two_score.penalties.to_string(),
+            egui::FontId { size: self.font_sizes.competitor_pen, ..Default::default()},
+            self.color_scheme.competitor_two_pen);
+
+        ui.painter().text(
+            match_grid.competitor_two.points.center(),
+            Align2::CENTER_CENTER,
+            self.bjj_match.score.competitor_two_score.points.to_string(),
+            egui::FontId { size: self.font_sizes.competitor_points, ..Default::default()},
+            self.color_scheme.competitor_two_points);
+
+
+        // ui.painter().rect_filled(match_grid.competitor_one.flag, Rounding::none(), Color32::LIGHT_GREEN);
+        // ui.painter().rect_filled(match_grid.competitor_one.name, Rounding::none(), Color32::DARK_GREEN);
+        // ui.painter().rect_filled(match_grid.competitor_one.team, Rounding::none(), Color32::DARK_GRAY);
+        // ui.painter().rect_filled(match_grid.competitor_one.points, Rounding::none(), Color32::RED);
+
+
+        // ui.painter().rect_filled(match_grid.competitor_two.full, Rounding::none(), Color32::DARK_BLUE);
+
+        // ui.painter().rect_filled(match_grid.competitor_two.flag, Rounding::none(), Color32::BROWN);
+        // ui.painter().rect_filled(match_grid.competitor_two.name, Rounding::none(), Color32::YELLOW);
+        // ui.painter().rect_filled(match_grid.competitor_two.team, Rounding::none(), Color32::DARK_GRAY);
+        // ui.painter().rect_filled(match_grid.competitor_two.points, Rounding::none(), Color32::BLUE);
+
+        // ui.painter().rect_filled(match_grid.time.time, Rounding::none(), Color32::BLUE);
+        // ui.painter().rect_filled(match_grid.time.fight_info_heading, Rounding::none(), Color32::LIGHT_GREEN);
+        // ui.painter().rect_filled(match_grid.time.fight_info_sub_heading, Rounding::none(), Color32::GREEN);
+        // ui.painter().rect_filled(match_grid.time.logo, Rounding::none(), Color32::BROWN);
+
+
+        ui.painter().text(
+            match_grid.time.time.center(),
+            Align2::CENTER_CENTER,
+            format_millis(self.bjj_match.time.get_remaining_time_milliseconds()),
+            font,
+            self.color_scheme.time);
 
 
     }
+
 
     fn draw_match_info_dialog(heading: &str, info: &mut MatchInformation, ui: &mut egui::Ui) {
         ui.heading(heading);

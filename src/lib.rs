@@ -205,6 +205,9 @@ impl Competitor {
             country
         }
     }
+    pub fn get_display_name(&self) -> String {
+        format!("{} {}", self.first_name, self.last_name)
+    }
 }
 
 
