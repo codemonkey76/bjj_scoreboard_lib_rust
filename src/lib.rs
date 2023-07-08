@@ -141,6 +141,7 @@ impl BJJMatch {
     }
 
     pub fn start(&mut self) {
+        self.time.duration_millis = self.info.match_time_minutes * 60 * 1000;
         self.time.start();
     }
 

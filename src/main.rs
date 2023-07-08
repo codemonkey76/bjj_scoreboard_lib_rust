@@ -1,4 +1,4 @@
-use std::default;
+
 use std::io::{stdout, Write};
 use std::time::Duration;
 use crossterm::terminal::{Clear, ClearType, disable_raw_mode, enable_raw_mode, EnterAlternateScreen, LeaveAlternateScreen};
@@ -8,6 +8,10 @@ use crossterm::event::{Event, KeyCode};
 use crossterm::style::Print;
 use bjj_scoreboard::{BJJMatch, Competitor, CompetitorNumber, Country, MatchInformation, MatchState};
 use eframe::egui;
+use eframe::egui::{Align2, Color32, FontFamily, Pos2, Rounding};
+use eframe::emath::Rect;
+use egui_extras::Size;
+use egui_grid::GridBuilder;
 use crate::AppState::{NewMatchDialog, Normal};
 
 fn main() -> Result<(), eframe::Error> {
@@ -50,7 +54,8 @@ impl eframe::App for BjjScoreboard {
                 self.draw_new_match_modal(ctx)
             },
             AppState::Normal => {
-                self.draw_match_screen(ctx);
+                self.draw_active_match_screen(ctx);
+                ctx.request_repaint();
             }
         }
 
@@ -95,6 +100,51 @@ impl BjjScoreboard {
                 ui.selectable_value(&mut competitor.country, Country::Brazil, "Brazil");
             });
         ui.end_row();
+    }
+
+    fn draw_active_match_screen(&mut self, ctx: &egui::Context) {
+        egui::CentralPanel::default().show(ctx, |ui| {
+            self.ui(ui);
+        });
+    }
+
+
+    fn ui(&mut self, ui: &mut egui::Ui) {
+        let match_grid = calc_grids(ui.clip_rect());
+
+        ui.painter().rect_filled(match_grid.full, Rounding::none(), Color32::BLACK);
+
+        ui.painter().rect_filled(match_grid.competitor_one.flag, Rounding::none(), Color32::LIGHT_GREEN);
+        ui.painter().rect_filled(match_grid.competitor_one.name, Rounding::none(), Color32::DARK_GREEN);
+        ui.painter().rect_filled(match_grid.competitor_one.team, Rounding::none(), Color32::DARK_GRAY);
+        ui.painter().rect_filled(match_grid.competitor_one.points, Rounding::none(), Color32::RED);
+
+
+        ui.painter().rect_filled(match_grid.competitor_two.full, Rounding::none(), Color32::DARK_BLUE);
+
+        ui.painter().rect_filled(match_grid.competitor_two.flag, Rounding::none(), Color32::BROWN);
+        ui.painter().rect_filled(match_grid.competitor_two.name, Rounding::none(), Color32::YELLOW);
+        ui.painter().rect_filled(match_grid.competitor_two.team, Rounding::none(), Color32::DARK_GRAY);
+        ui.painter().rect_filled(match_grid.competitor_two.points, Rounding::none(), Color32::BLUE);
+
+        ui.painter().rect_filled(match_grid.time.time, Rounding::none(), Color32::BLUE);
+        ui.painter().rect_filled(match_grid.time.fight_info_heading, Rounding::none(), Color32::LIGHT_GREEN);
+        ui.painter().rect_filled(match_grid.time.fight_info_sub_heading, Rounding::none(), Color32::GREEN);
+        ui.painter().rect_filled(match_grid.time.logo, Rounding::none(), Color32::BROWN);
+
+
+        // Specify the text color
+        let color = Color32::from_rgb(255, 0, 0);
+
+        let font = egui::FontId {
+            size: 32.0,
+            ..Default::default()
+        };
+
+
+        ui.painter().text(match_grid.time.time.center(), Align2::CENTER_CENTER, format_millis(self.bjj_match.time.get_remaining_time_milliseconds()), font, color);
+
+
     }
 
     fn draw_match_info_dialog(heading: &str, info: &mut MatchInformation, ui: &mut egui::Ui) {
@@ -143,6 +193,7 @@ impl BjjScoreboard {
 
 
 }
+
 
 fn app() -> Result<()> {
     let shane = Competitor::new("Shane", "Poppleton", "Fight Club Jiu-Jitsu", Country::Australia);
@@ -274,3 +325,143 @@ pub fn format_millis(millis: usize) -> String {
 
     format!("{:01}:{:02}:{:02}.{:03}", hours, minutes, seconds, milliseconds)
 }
+
+#[derive(Debug)]
+struct MatchGrid {
+    full: Rect,
+    competitor_one: CompetitorGrid,
+    competitor_two: CompetitorGrid,
+    time: TimeGrid
+}
+
+#[derive(Debug)]
+struct TimeGrid {
+    full: Rect,
+    time: Rect,
+    fight_info_heading: Rect,
+    fight_info_sub_heading: Rect,
+    logo: Rect
+}
+#[derive(Debug)]
+struct CompetitorGrid {
+    full: Rect,
+    main: Rect,
+    left: Rect,
+    right: Rect,
+    comp: Rect,
+    flag: Rect,
+    name: Rect,
+    team: Rect,
+    points: Rect,
+    advantages: Rect,
+    penalties: Rect
+}
+
+fn calc_grids(rect: Rect) -> MatchGrid {
+    let (top,bottom) = split_vertical(rect, 0.75);
+    let (top, middle) = split_vertical(top, 0.5);
+
+    let competitor_one = calc_competitor_grid(top);
+    let competitor_two = calc_competitor_grid(middle);
+
+    let time = calc_time_grid(bottom);
+
+    MatchGrid {
+        full: rect,
+        competitor_one,
+        competitor_two,
+        time
+    }
+}
+
+fn calc_time_grid(rect: Rect) -> TimeGrid {
+    let (left, logo) = split_horizontal(rect, 5.0 / 6.0);
+    let (time, fight_info) = split_horizontal(left, 1.0 / 3.0);
+    let (fight_info_heading, fight_info_sub_heading) = split_vertical(fight_info, 0.5);
+
+    TimeGrid {
+        full: rect,
+        time,
+        fight_info_heading,
+        fight_info_sub_heading,
+        logo
+    }
+}
+
+fn calc_competitor_grid(rect: Rect) -> CompetitorGrid {
+    let (main, points) = split_horizontal(rect, 5.0 / 6.0);
+    let (left, right) = split_horizontal(main, 10.0 / 11.0);
+    let (comp, team) = split_vertical(left, 2.0 / 3.0);
+    let (flag, name) = split_horizontal(comp, 1.0 / 8.0);
+    let (advantages, penalties) = split_vertical(right, 0.5);
+
+    CompetitorGrid {
+        full: rect,
+        main,
+        left,right,
+        comp,
+        flag,
+        name,
+        team,
+        points,
+        advantages,
+        penalties
+    }
+}
+
+fn split_horizontal(rect: Rect, at: f32) -> (Rect, Rect) {
+    let new_x = rect.min.x + (rect.max.x - rect.min.x) * at;
+
+    (
+        Rect::from_min_max(rect.min, Pos2::new(new_x, rect.max.y)),
+        Rect::from_min_max(Pos2::new(new_x, rect.min.y), rect.max)
+    )
+}
+
+fn split_fixed_horizontal(rect: Rect, at: f32) -> (Rect, Rect) {
+    let new_x = rect.min.x + at;
+
+    (
+        Rect::from_min_max(rect.min, Pos2::new(new_x, rect.max.y)),
+        Rect::from_min_max(Pos2::new(new_x, rect.min.y), rect.max)
+    )
+}
+
+fn split_vertical(rect: Rect, at: f32) -> (Rect, Rect) {
+    let new_y = rect.min.y + (rect.max.y - rect.min.y) * at;
+
+    (
+        Rect::from_min_max(rect.min, Pos2::new(rect.max.x, new_y)),
+        Rect::from_min_max(Pos2::new(rect.min.x, new_y), rect.max)
+    )
+}
+
+fn split_fixed_vertical(rect: Rect, at: f32) -> (Rect, Rect) {
+    let new_y = rect.min.y + at;
+
+    (
+        Rect::from_min_max(rect.min, Pos2::new(rect.max.x, new_y)),
+        Rect::from_min_max(Pos2::new(rect.min.x, new_y), rect.max)
+    )
+}
+#[cfg(test)]
+mod tests {
+    use eframe::egui::{Pos2, Rect};
+    use crate::split_vertical;
+
+    #[test]
+    fn test_split_vertical() {
+        let p1 = Pos2::new(0.0, 180.0);
+        let p2 = Pos2::new(484.0, 360.0);
+        let rect = Rect::from_min_max(p1, p2);
+
+        let (rect1, _) = split_vertical(rect, 2.0 / 3.0);
+
+        assert_eq!(rect1.min.x, 0.0);
+        assert_eq!(rect1.min.y, 180.0);
+
+        assert_eq!(rect1.max.x, 484.0);
+        assert_eq!(rect1.max.y, 300.0);
+    }
+}
+
